@@ -15,12 +15,9 @@ def main():
         request = sock.recv(1024)
         request = request.decode("utf-8")
         data = request.lower().strip().split('\n')[0]
-        if data == 'ping':
-            sock.send('+PONG\r\n'.encode('utf-8'))
+        # if data == 'ping':
+        sock.send('+PONG\r\n'.encode('utf-8'))
         
-        if data == "close":
-            sock.send("closed\n".encode("utf-8"))
-            break
     sock.close()
     server_socket.close()
 
