@@ -1,6 +1,7 @@
 import socket  # noqa: F401
 from threading import Thread
 from enum import Enum
+from datetime import datetime, timedelta
 
 COMMANDS = "PING ECHO SET GET".split()
 ON_MEM_DICT = {}
@@ -22,8 +23,12 @@ def extract_command_type(arg: str) -> str:
 def extract_command_args(args: list[str], start: int) -> list[str]:
     command_args: list[str] = []
     for i in range(start, len(args)):
+        # skipping string len entries
         if args[i].startswith('$'):
             continue
+        # slicing : on integer data types
+        if args[i].startswith(':'):
+            args[i] = args[i][1:]
         if args[i].upper() not in COMMANDS:
             command_args.append(args[i])
     return command_args[0:len(command_args)-1]
@@ -78,16 +83,40 @@ def handler(sock: socket.socket, addr: int) -> None:
         for command in commands:
             if command == 'PING':
                 to_send = '+PONG' * commands[command]['count']
+                
             if command == 'ECHO':
                 to_send = commands[command]['args']
+                
             if command == 'SET':
-                key, value = commands[command]['args']
-                ON_MEM_DICT[key] = value
+                key, value, *extra_args = commands[command]['args']
+                # Extract TTL (in milliseconds) if provided
+                if 'px' in extra_args:
+                    ttl_index = extra_args.index('px') + 1
+                    ttl = int(extra_args[ttl_index])
+                else:
+                    ttl = None
+                    
+                ON_MEM_DICT[key] = {
+                    'value': value,
+                    'ttl': ttl,
+                    'timestamp': datetime.now()
+                    }
                 to_send = '+Ok'
+                
             if command == 'GET':
                 key = commands[command]['args'][0]
-                to_send = ON_MEM_DICT.get(key) or 'NIL'
-
+                value = ON_MEM_DICT.get(key) or 'NIL'
+                ttl = value.get('ttl')
+                timestamp = value.get('timestamp')
+                if not ttl:
+                    to_send = value.get('value')
+                else:
+                    if datetime.now() > timestamp + timedelta(milliseconds=ttl):
+                        del ON_MEM_DICT[key]
+                        to_send = 'NIL'
+                    else:
+                        to_send = value.get('value')
+                    
             encoded_respose: str = encode_resp(to_send)
         sock.sendall(encoded_respose)
     sock.close()
