@@ -2,9 +2,18 @@ import socket  # noqa: F401
 from threading import Thread
 from enum import Enum
 from datetime import datetime, timedelta
+import argparse
 
-COMMANDS = "PING ECHO SET GET".split()
+COMMANDS = [
+    'PING', 'ECHO', 'SET', 'GET', 'CONFIG'
+]
+# On memory dict
 ON_MEM_DICT = {}
+# stores configuration settings
+CONFIG_DICT = {
+    'dir': '/tmp/redis-files',
+    'dbfilename': 'dump.rdb'
+}
 
 class RedisResponse(Enum):
     NIL = -1
@@ -29,8 +38,7 @@ def extract_command_args(args: list[str], start: int) -> list[str]:
         # slicing : on integer data types
         if args[i].startswith(':'):
             args[i] = args[i][1:]
-        if args[i].upper() not in COMMANDS:
-            command_args.append(args[i])
+        command_args.append(args[i])
     return command_args[0:len(command_args)-1]
 
 def decode_resp(request: str) -> dict[str]:
@@ -58,6 +66,7 @@ def decode_resp(request: str) -> dict[str]:
                     existing = commands.get(command)
                     existing['count'] += 1
                     commands[command] = existing
+            break
     return commands
 
 def encode_resp(to_send: str) -> str:
@@ -85,7 +94,7 @@ def handler(sock: socket.socket, addr: int) -> None:
                 to_send = '+PONG' * commands[command]['count']
                 
             if command == 'ECHO':
-                to_send = commands[command]['args']
+                to_send = "".join(commands[command]['args'])
                 
             if command == 'SET':
                 key, value, *extra_args = commands[command]['args']
@@ -116,6 +125,13 @@ def handler(sock: socket.socket, addr: int) -> None:
                         to_send = 'NIL'
                     else:
                         to_send = value.get('value')
+            
+            if command == 'CONFIG':
+                subcommand, *extra_args = commands[command]['args']
+                to_send = ''
+                if subcommand.upper() == 'GET':
+                    for arg in extra_args:
+                        to_send += CONFIG_DICT.get(arg) + ' '
                     
             encoded_respose: str = encode_resp(to_send)
         sock.sendall(encoded_respose)
@@ -124,6 +140,14 @@ def handler(sock: socket.socket, addr: int) -> None:
 
  
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dir', type=str)
+    parser.add_argument('--dbfilename', type=str)
+    args = parser.parse_args()
+    if args.dir:
+        CONFIG_DICT['dir'] = args.dir
+    if args.dbfilename:
+        CONFIG_DICT['dbfilename'] = args.dbfilename
     print("Listening on 127.0.0.1 on port 6379")
     while True:
         sock, addr = server_socket.accept() # wait for client
