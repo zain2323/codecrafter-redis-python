@@ -1,4 +1,4 @@
-import socket  # noqa: F401
+import socket
 from threading import Thread
 from enum import Enum
 from datetime import datetime, timedelta
@@ -41,10 +41,10 @@ def extract_command_args(args: list[str], start: int) -> list[str]:
         command_args.append(args[i])
     return command_args[0:len(command_args)-1]
 
-def decode_resp(request: str) -> dict[str]:
+def decode_resp(request: str) -> dict:
     args: list[str] = request.strip().split('\\r\\n')
     data_type = ''
-    commands: dict[str] = {}
+    commands: dict = {}
     for i, arg in enumerate(args):
         if arg == '':
             break
@@ -69,7 +69,7 @@ def decode_resp(request: str) -> dict[str]:
             break
     return commands
 
-def encode_resp(to_send: str) -> str:
+def encode_resp(to_send: str) -> bytes:
     to_send = to_send.split('+')
     encoded_str = ''
     for element in to_send:
@@ -87,8 +87,9 @@ def handler(sock: socket.socket, addr: int) -> None:
     print(f"connected with client on address {addr}")
     while True:
         request:str = sock.recv(1024).decode("utf-8")
-        commands: dict['str'] = decode_resp(request)
-        to_send: list[str] = []
+        commands: dict = decode_resp(request)
+        to_send = []
+        encoded_response: bytes = b''
         for command in commands:
             if command == 'PING':
                 to_send = '+PONG' * commands[command]['count']
@@ -133,8 +134,8 @@ def handler(sock: socket.socket, addr: int) -> None:
                     for arg in extra_args:
                         to_send += CONFIG_DICT.get(arg) + ' '
                     
-            encoded_respose: str = encode_resp(to_send)
-        sock.sendall(encoded_respose)
+            encoded_response = encode_resp(to_send)
+        sock.sendall(encoded_response)
     sock.close()
     server_socket.close()
 
